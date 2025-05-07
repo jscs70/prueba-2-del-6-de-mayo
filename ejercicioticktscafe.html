@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestión de Tickets de Café</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      background-color: #f8f9fa;
+      color: #343a40;
+    }
+    .container {
+      margin-top: 20px;
+    }
+    .card {
+      margin-bottom: 20px;
+    }
+    .navbar {
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <a class="navbar-brand" href="#">Gestión de Tickets de Café</a>
+  </nav>
+
+  <div class="container">
+    <div id="auth-section">
+      <h3>Login</h3>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="login-email">Email</label>
+          <input type="email" class="form-control" id="login-email" required>
+        </div>
+        <div class="form-group">
+          <label for="login-password">Contraseña</label>
+          <input type="password" class="form-control" id="login-password" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Login</button>
+      </form>
+      <button id="show-register" class="btn btn-link">Registrarse</button>
+      <button id="show-reset" class="btn btn-link">Recuperar Contraseña</button>
+    </div>
+
+    <div id="register-section" style="display:none;">
+      <h3>Registro</h3>
+      <form id="register-form">
+        <div class="form-group">
+          <label for="register-email">Email</label>
+          <input type="email" class="form-control" id="register-email" required>
+        </div>
+        <div class="form-group">
+          <label for="register-password">Contraseña</label>
+          <input type="password" class="form-control" id="register-password" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Registrarse</button>
+      </form>
+      <button id="show-login" class="btn btn-link">Iniciar Sesión</button>
+    </div>
+
+    <div id="reset-section" style="display:none;">
+      <h3>Recuperar Contraseña</h3>
+      <form id="reset-form">
+        <div class="form-group">
+          <label for="reset-email">Email</label>
+          <input type="email" class="form-control" id="reset-email" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Recuperar</button>
+      </form>
+      <button id="show-login-reset" class="btn btn-link">Iniciar Sesión</button>
+    </div>
+
+    <div id="ticket-section" style="display:none;">
+      <h3>Crear Ticket</h3>
+      <form id="ticket-form">
+        <div class="form-group">
+          <label for="cliente">Nombre del Cliente</label>
+          <input type="text" class="form-control" id="cliente" required>
+        </div>
+        <div class="form-group">
+          <label for="pais">País de Procedencia</label>
+          <input type="text" class="form-control" id="pais" required>
+        </div>
+        <div class="form-group">
+          <label for="kilogramos">Kilogramos</label>
+          <input type="number" class="form-control" id="kilogramos" required>
+        </div>
+        <div class="form-group">
+          <label for="producto">Tipo de Producto</label>
+          <input type="text" class="form-control" id="producto" required>
+        </div>
+        <div class="form-group">
+          <label for="descripcion">Descripción</label>
+          <textarea class="form-control" id="descripcion" required></textarea>
+        </div>
+        <div class="form-group">
+          <label for="prioridad">Prioridad</label>
+          <select class="form-control" id="prioridad" required>
+            <option value="alta">Alta</option>
+            <option value="media">Media</option>
+            <option value="baja">Baja</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Crear Ticket</button>
+      </form>
+
+      <h3 class="mt-5">Lista de Tickets</h3>
+      <div id="ticket-list" class="row"></div>
+      <button id="export-all" class="btn btn-success">Exportar Todos a Excel</button>
+
+      <h3 class="mt-5">Estadísticas</h3>
+      <canvas id="ticket-chart"></canvas>
+    </div>
+  </div>
+
+  <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, addDoc, getDocs, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { saveAs } from "https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js";
+
+    // Your web app's Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyCRq_SXGeQtxuV39H3pdaiGbDA5whx0gfo",
+      authDomain: "ticket-2-ef8f9.firebaseapp.com",
+      projectId: "ticket-2-ef8f9",
+      storageBucket: "ticket-2-ef8f9.appspot.com",
+      messagingSenderId: "924326044421",
+      appId: "1:924326044421:web:08ea83da262f856eab4d6c"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth();
+    const db = getFirestore(app);
+
+    // Helper functions
+    function showSection(section) {
+      document.getElementById('auth-section').style.display = 'none';
+      document.getElementById('register-section').style.display = 'none';
+      document.getElementById('reset-section').style.display = 'none';
+      document.getElementById('ticket-section').style.display = 'none';
+      document.getElementById(section).style.display = 'block';
+    }
+
+    function generateFolio() {
+      return 'TICKET-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+    }
+
+    async function loadTickets() {
+      const querySnapshot = await getDocs(collection(db, 'tickets'));
+      const ticketList = document.getElementById('ticket-list');
+      ticketList.innerHTML = '';
+      querySnapshot.forEach((doc) => {
+        const ticket = doc.data();
+        const ticketCard = document.createElement('div');
+        ticketCard.className = 'card col-md-4';
+        ticketCard.innerHTML = `
+          <div class="card-body">
+            <h5 class="card-title">Folio: ${ticket.folio}</h5>
+            <p class="card-text">Cliente: ${ticket.cliente}</p>
+            <p class="card-text">País: ${ticket.pais}</p>
+            <p class="card-text">Descripción: ${ticket.descripcion}</p>
+            <p class="card-text">Prioridad: ${ticket.prioridad}</p>
+            <button class="btn btn-danger" onclick="deleteTicket('${doc.id}')">Eliminar</button>
+          </div>`;
+        ticketList.appendChild(ticketCard);
+      });
+      updateChart();
+    }
+
+    async function deleteTicket(id) {
+      await deleteDoc(doc(db, 'tickets', id));
+      loadTickets();
+    }
+
+    async function updateChart() {
+      const querySnapshot = await getDocs(collection(db, 'tickets'));
+      const priorities = { alta: 0, media: 0, baja: 0 };
+      querySnapshot.forEach((doc) => {
+        const ticket = doc.data();
+        priorities[ticket.prioridad]++;
+      });
+
+      const ctx = document.getElementById('ticket-chart').getContext('2d');
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['Alta', 'Media', 'Baja'],
+          datasets: [{
+            label: '# de Tickets',
+            data: [priorities.alta, priorities.media, priorities.baja],
+            backgroundColor: ['red', 'yellow', 'green'],
+            borderColor: ['red', 'yellow', 'green'],
+            borderWidth: 1
+          }]
+        },
+        options: {
+          scales: {
+            y: {
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+
+    // Event listeners
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value;
+      const password = document.getElementById('login-password').value;
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        showSection('ticket-section');
+        loadTickets();
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
+    document.getElementById('register-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('register-email').value;
+      const password = document.getElementById('register-password').value;
+      try {
+        await createUserWithEmailAndPassword(auth, email, password);
+        showSection('ticket-section');
+        loadTickets();
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
+    document.getElementById('reset-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('reset-email').value;
+      try {
+        await sendPasswordResetEmail(auth, email);
+        alert('Correo de recuperación enviado');
+        showSection('auth-section');
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
+    document.getElementById('ticket-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const folio = generateFolio();
+      const cliente = document.getElementById('cliente').value;
+      const pais = document.getElementById('pais').value;
+      const kilogramos = document.getElementById('kilogramos').value;
+      const producto = document.getElementById('producto').value;
+      const descripcion = document.getElementById('descripcion').value;
+      const prioridad = document.getElementById('prioridad').value;
+
+      try {
+        await addDoc(collection(db, 'tickets'), {
+          folio,
+          cliente,
+          pais,
+          kilogramos,
+          producto,
+          descripcion,
+          prioridad
+        });
+        loadTickets();
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+
+    document.getElementById('show-register').addEventListener('click', () => showSection('register-section'));
+    document.getElementById('show-login').addEventListener('click', () => showSection('auth-section'));
+    document.getElementById('show-reset').addEventListener('click', () => showSection('reset-section'));
+    document.getElementById('show-login-reset').addEventListener('click', () => showSection('auth-section'));
+
+    document.getElementById('export-all').addEventListener('click', async () => {
+      const querySnapshot = await getDocs(collection(db, 'tickets'));
+      let csvContent = "data:text/csv;charset=utf-8,";
+      csvContent += "Folio,Cliente,País,Kilogramos,Producto,Descripción,Prioridad\n";
+      querySnapshot.forEach((doc) => {
+        const ticket = doc.data();
+        csvContent += `${ticket.folio},${ticket.cliente},${ticket.pais},${ticket.kilogramos},${ticket.producto},${ticket.descripcion},${ticket.prioridad}\n`;
+      });
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", "tickets.csv");
+      document.body.appendChild(link);
+      link.click();
+    });
+
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        showSection('ticket-section');
+        loadTickets();
+      } else {
+        showSection('auth-section');
+      }
+    });
+  </script>
+</body>
+</html>
